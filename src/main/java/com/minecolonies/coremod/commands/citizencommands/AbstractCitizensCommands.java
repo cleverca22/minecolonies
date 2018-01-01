@@ -102,7 +102,7 @@ public abstract class AbstractCitizensCommands extends AbstractSingleCommand
 
         final int citizenId = getValidCitizenId(colony, firstArgumentColonyId, args);
 
-        if (citizenId == -1 || colony.getCitizen(citizenId) == null)
+        if (citizenId == -1 || colony.getCitizenManager().getCitizen(citizenId) == null)
         {
             sender.sendMessage(new TextComponentString(NO_ARGUMENTS));
             return;
@@ -110,52 +110,6 @@ public abstract class AbstractCitizensCommands extends AbstractSingleCommand
 
         executeSpecializedCode(server, sender, colony, citizenId);
     }
-
-    /**
-     * Get a valid citizenid from the arguments.
-     *
-     * @param colony                the colony.
-     * @param firstArgumentColonyId to define the offset.
-     * @param args                  the arguments.
-     * @return the valid id or -1 if not found.
-     */
-    private static int getValidCitizenId(final Colony colony, final boolean firstArgumentColonyId, final String... args)
-    {
-        int offset = 0;
-        if (firstArgumentColonyId)
-        {
-            offset = 1;
-        }
-
-        final int citizenId = getIthArgument(args, offset, -1);
-        if (citizenId == -1)
-        {
-            if (args.length >= offset + 2)
-            {
-                final String citizenName = args[offset] + " " + args[offset + 1] + " " + args[offset + 2];
-                for (int i = 1; i <= colony.getCitizens().size(); i++)
-                {
-                    if (colony.getCitizen(i).getName().equals(citizenName))
-                    {
-                        return i;
-                    }
-                }
-            }
-
-            return citizenId;
-        }
-        return citizenId;
-    }
-
-    /**
-     * Citizen commands have to overwrite this to handle their specialized code.
-     *
-     * @param server the minecraft server.
-     * @param sender the command sender.
-     * @param colonyId  the id for the colony
-     * @param citizenId the id for the citizen
-     */
-    abstract void executeSpecializedCode(@NotNull final MinecraftServer server, final ICommandSender sender, final Colony colonyId, final int citizenId);
 
     @NotNull
     @Override
@@ -180,4 +134,50 @@ public abstract class AbstractCitizensCommands extends AbstractSingleCommand
      * @return the command.
      */
     abstract Commands getCommand();
+
+    /**
+     * Get a valid citizenid from the arguments.
+     *
+     * @param colony                the colony.
+     * @param firstArgumentColonyId to define the offset.
+     * @param args                  the arguments.
+     * @return the valid id or -1 if not found.
+     */
+    private static int getValidCitizenId(final Colony colony, final boolean firstArgumentColonyId, final String... args)
+    {
+        int offset = 0;
+        if (firstArgumentColonyId)
+        {
+            offset = 1;
+        }
+
+        final int citizenId = getIthArgument(args, offset, -1);
+        if (citizenId == -1)
+        {
+            if (args.length >= offset + 2)
+            {
+                final String citizenName = args[offset] + " " + args[offset + 1] + " " + args[offset + 2];
+                for (int i = 1; i <= colony.getCitizenManager().getCitizens().size(); i++)
+                {
+                    if (colony.getCitizenManager().getCitizen(i).getName().equals(citizenName))
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            return citizenId;
+        }
+        return citizenId;
+    }
+
+    /**
+     * Citizen commands have to overwrite this to handle their specialized code.
+     *
+     * @param server    the minecraft server.
+     * @param sender    the command sender.
+     * @param colonyId  the id for the colony
+     * @param citizenId the id for the citizen
+     */
+    abstract void executeSpecializedCode(@NotNull final MinecraftServer server, final ICommandSender sender, final Colony colonyId, final int citizenId);
 }

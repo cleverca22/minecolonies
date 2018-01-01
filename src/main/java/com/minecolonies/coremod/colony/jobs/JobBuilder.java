@@ -79,6 +79,39 @@ public class JobBuilder extends AbstractJobStructure
         return new EntityAIStructureBuilder(this);
     }
 
+    @Nullable
+    @Override
+    public SoundEvent getBedTimeSound()
+    {
+        if (getCitizen() != null)
+        {
+            return getCitizen().isFemale() ? BuilderSounds.Female.offToBed : null;
+        }
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public SoundEvent getBadWeatherSound()
+    {
+        if (getCitizen() != null)
+        {
+            return getCitizen().isFemale() ? BuilderSounds.Female.badWeather : null;
+        }
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public SoundEvent getMoveAwaySound()
+    {
+        if (getCitizen() != null)
+        {
+            return getCitizen().isFemale() ? BuilderSounds.Female.hostile : null;
+        }
+        return null;
+    }
+
     /**
      * Get the Work Order ID for this Job.
      *
@@ -120,7 +153,7 @@ public class JobBuilder extends AbstractJobStructure
         getCitizen().getColony().getWorkManager().removeWorkOrder(workOrderId);
         setWorkOrder(null);
         setStructure(null);
-        this.getColony().incrementStatistic("huts");
+        this.getColony().getStatsManager().incrementStatistic("huts", this.getColony());
     }
 
     /**
@@ -162,38 +195,5 @@ public class JobBuilder extends AbstractJobStructure
         {
             workOrderId = order.getID();
         }
-    }
-
-    @Nullable
-    @Override
-    public SoundEvent getBadWeatherSound()
-    {
-        if (getCitizen() != null)
-        {
-            return getCitizen().isFemale() ? BuilderSounds.Female.badWeather : null;
-        }
-        return null;
-    }
-
-    @Nullable
-    @Override
-    public SoundEvent getBedTimeSound()
-    {
-        if (getCitizen() != null)
-        {
-            return getCitizen().isFemale() ? BuilderSounds.Female.offToBed : null;
-        }
-        return null;
-    }
-
-    @Nullable
-    @Override
-    public SoundEvent getMoveAwaySound()
-    {
-        if (getCitizen() != null)
-        {
-            return getCitizen().isFemale() ? BuilderSounds.Female.hostile : null;
-        }
-        return null;
     }
 }

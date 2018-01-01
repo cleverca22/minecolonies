@@ -5,6 +5,7 @@ import com.minecolonies.api.util.Log;
 import com.minecolonies.coremod.colony.Colony;
 import com.minecolonies.coremod.colony.ColonyManager;
 import com.minecolonies.coremod.colony.buildings.AbstractBuilding;
+import com.minecolonies.coremod.colony.buildings.views.AbstractBuildingView;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.util.math.BlockPos;
@@ -41,7 +42,7 @@ public class MarkBuildingDirtyMessage extends AbstractMessage<MarkBuildingDirtyM
      *
      * @param building AbstractBuilding of the request.
      */
-    public MarkBuildingDirtyMessage(@NotNull final AbstractBuilding.View building)
+    public MarkBuildingDirtyMessage(@NotNull final AbstractBuildingView building)
     {
         super();
         this.colonyId = building.getColony().getID();
@@ -73,7 +74,7 @@ public class MarkBuildingDirtyMessage extends AbstractMessage<MarkBuildingDirtyM
             return;
         }
 
-        final AbstractBuilding building = colony.getBuilding(message.buildingId);
+        final AbstractBuilding building = colony.getBuildingManager().getBuilding(message.buildingId);
         if (building == null)
         {
             Log.getLogger().warn("TransferItemsRequestMessage building is null");

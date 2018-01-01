@@ -1,14 +1,21 @@
 package com.minecolonies.coremod.colony.buildings;
 
+import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableList;
+import com.minecolonies.api.colony.requestsystem.resolver.IRequestResolver;
 import com.minecolonies.api.util.InventoryUtils;
 import com.minecolonies.api.util.ItemStackUtils;
+import com.minecolonies.api.util.constant.TypeConstants;
+import com.minecolonies.blockout.Log;
 import com.minecolonies.blockout.views.Window;
 import com.minecolonies.coremod.blocks.BlockHutDeliveryman;
+import com.minecolonies.coremod.blocks.BlockHutWareHouse;
 import com.minecolonies.coremod.blocks.BlockMinecoloniesRack;
 import com.minecolonies.coremod.blocks.ModBlocks;
 import com.minecolonies.coremod.client.gui.WindowWareHouseBuilding;
 import com.minecolonies.coremod.colony.Colony;
 import com.minecolonies.coremod.colony.ColonyView;
+import com.minecolonies.coremod.colony.requestsystem.resolvers.WarehouseRequestResolver;
 import com.minecolonies.coremod.tileentities.TileEntityColonyBuilding;
 import com.minecolonies.coremod.tileentities.TileEntityRack;
 import com.minecolonies.coremod.tileentities.TileEntityWareHouse;
@@ -50,7 +57,7 @@ public class BuildingWareHouse extends AbstractBuilding
     /**
      * The storage tag for the storage capacity.
      */
-    private static final String TAG_STORAGE     = "tagStorage" ;
+    private static final String TAG_STORAGE = "tagStorage";
 
     /**
      * The list of deliverymen registered to this building.
@@ -124,17 +131,116 @@ public class BuildingWareHouse extends AbstractBuilding
         {
             final Colony colony = getColony();
             if (colony != null && colony.getWorld() != null
-                    && (!(colony.getWorld().getBlockState(new BlockPos(pos)) instanceof BlockHutDeliveryman) || colony.isCoordInColony(colony.getWorld(), new BlockPos(pos))))
+                  && (!(colony.getWorld().getBlockState(new BlockPos(pos)) instanceof BlockHutDeliveryman) || colony.isCoordInColony(colony.getWorld(), new BlockPos(pos))))
             {
                 registeredDeliverymen.remove(pos);
             }
         }
     }
 
+    /**
+     * Check if deliveryman is allowed to access warehouse.
+     *
+     * @param buildingWorker the building of the deliveryman.
+     * @return true if able to.
+     */
+    public boolean canAccessWareHouse(final BuildingDeliveryman buildingWorker)
+    {
+        return registeredDeliverymen.contains(new Vec3d(buildingWorker.getID()));
+    }
+
+    /**
+     * Get the deliverymen connected with this building.
+     *
+     * @return the unmodifiable List of positions of them.
+     */
+    public List<Vec3d> getRegisteredDeliverymen()
+    {
+        return new ArrayList<>(Collections.unmodifiableList(registeredDeliverymen));
+    }
+
+    @Override
+    public void readFromNBT(@NotNull final NBTTagCompound compound)
+    {
+        super.readFromNBT(compound);
+
+        registeredDeliverymen.clear();
+        final NBTTagList deliverymanTagList = compound.getTagList(TAG_DELIVERYMAN, Constants.NBT.TAG_COMPOUND);
+        for (int i = 0; i < deliverymanTagList.tagCount(); i++)
+        {
+            final BlockPos pos = NBTUtil.getPosFromTag(deliverymanTagList.getCompoundTagAt(i));
+            if (getColony() != null && getColony().getBuildingManager().getBuilding(pos) instanceof AbstractBuildingWorker && !registeredDeliverymen.contains(new Vec3d(pos)))
+            {
+                registeredDeliverymen.add(new Vec3d(pos));
+            }
+        }
+        storageUpgrade = compound.getInteger(TAG_STORAGE);
+    }
+
+    @NotNull
+    @Override
+    public String getSchematicName()
+    {
+        return WAREHOUSE;
+    }
+
+    @Override
+    public void writeToNBT(@NotNull final NBTTagCompound compound)
+    {
+        super.writeToNBT(compound);
+        @NotNull final NBTTagList levelTagList = new NBTTagList();
+        for (@NotNull final Vec3d deliverymanBuilding : registeredDeliverymen)
+        {
+            levelTagList.appendTag(NBTUtil.createPosTag(new BlockPos(deliverymanBuilding)));
+        }
+        compound.setTag(TAG_DELIVERYMAN, levelTagList);
+        compound.setInteger(TAG_STORAGE, storageUpgrade);
+    }
+
+    /**
+     * Returns the tile entity that belongs to the colony building.
+     *
+     * @return {@link TileEntityColonyBuilding} object of the building.
+     */
+    @Override
+    public TileEntityWareHouse getTileEntity()
+    {
+        final Colony colony = getColony();
+        if ((tileEntity == null || tileEntity.isInvalid()) && colony != null && colony.getWorld() != null && getLocation() != null
+              && colony.getWorld().getBlockState(getLocation()) != null && colony.getWorld().getBlockState(this.getLocation()).getBlock() instanceof BlockHutWareHouse)
+        {
+            final TileEntity te = getColony().getWorld().getTileEntity(this.getLocation());
+            if (te instanceof TileEntityWareHouse)
+            {
+                tileEntity = (TileEntityWareHouse) te;
+                if (tileEntity.getBuilding() == null)
+                {
+                    tileEntity.setColony(colony);
+                    tileEntity.setBuilding(this);
+                }
+            }
+        }
+
+        return tileEntity;
+    }
+
+    @Override
+    public int getMaxBuildingLevel()
+    {
+        return MAX_LEVEL;
+    }
+
+    @Override
+    public void serializeToView(@NotNull final ByteBuf buf)
+    {
+        super.serializeToView(buf);
+        buf.writeBoolean(storageUpgrade < MAX_STORAGE_UPGRADE);
+    }
+
     @Override
     public void registerBlockPosition(@NotNull final Block block, @NotNull final BlockPos pos, @NotNull final World world)
     {
-        if ((block instanceof BlockContainer || block instanceof BlockMinecoloniesRack)&& world != null)
+        if ((block instanceof BlockContainer || block instanceof BlockMinecoloniesRack) && world != null)
         {
             final TileEntity entity = getColony().getWorld().getTileEntity(pos);
             if (entity instanceof TileEntityChest)
@@ -180,89 +286,17 @@ public class BuildingWareHouse extends AbstractBuilding
         }
     }
 
-    /**
-     * Check if deliveryman is allowed to access warehouse.
-     *
-     * @param buildingWorker the building of the deliveryman.
-     * @return true if able to.
-     */
-    public boolean canAccessWareHouse(final BuildingDeliveryman buildingWorker)
-    {
-        return registeredDeliverymen.contains(new Vec3d(buildingWorker.getID()));
-    }
-
-    /**
-     * Get the deliverymen connected with this building.
-     *
-     * @return the unmodifiable List of positions of them.
-     */
-    public List<Vec3d> getRegisteredDeliverymen()
-    {
-        return Collections.unmodifiableList(registeredDeliverymen);
-    }
-
     @Override
-    public void readFromNBT(@NotNull final NBTTagCompound compound)
+    public ImmutableCollection<IRequestResolver> getResolvers()
     {
-        super.readFromNBT(compound);
+        ImmutableCollection<IRequestResolver> supers = super.getResolvers();
+        ImmutableList.Builder<IRequestResolver> builder = ImmutableList.builder();
 
-        registeredDeliverymen.clear();
-        final NBTTagList deliverymanTagList = compound.getTagList(TAG_DELIVERYMAN, Constants.NBT.TAG_COMPOUND);
-        for (int i = 0; i < deliverymanTagList.tagCount(); i++)
-        {
-            final BlockPos pos = NBTUtil.getPosFromTag(deliverymanTagList.getCompoundTagAt(i));
-            if (getColony() != null && getColony().getBuilding(pos) instanceof AbstractBuildingWorker && !registeredDeliverymen.contains(new Vec3d(pos)))
-            {
-                registeredDeliverymen.add(new Vec3d(pos));
-            }
-        }
-        storageUpgrade = compound.getInteger(TAG_STORAGE);
-    }
+        builder.addAll(supers);
+        builder.add(new WarehouseRequestResolver(getRequester().getRequesterLocation(),
+                                                  getColony().getRequestManager().getFactoryController().getNewInstance(TypeConstants.ITOKEN)));
 
-    @NotNull
-    @Override
-    public String getSchematicName()
-    {
-        return WAREHOUSE;
-    }
-
-    @Override
-    public void writeToNBT(@NotNull final NBTTagCompound compound)
-    {
-        super.writeToNBT(compound);
-        @NotNull final NBTTagList levelTagList = new NBTTagList();
-        for (@NotNull final Vec3d deliverymanBuilding : registeredDeliverymen)
-        {
-            levelTagList.appendTag(NBTUtil.createPosTag(new BlockPos(deliverymanBuilding)));
-        }
-        compound.setTag(TAG_DELIVERYMAN, levelTagList);
-        compound.setInteger(TAG_STORAGE, storageUpgrade);
-    }
-
-    /**
-     * Returns the tile entity that belongs to the colony building.
-     *
-     * @return {@link TileEntityColonyBuilding} object of the building.
-     */
-    @Override
-    public TileEntityWareHouse getTileEntity()
-    {
-        final Colony colony = getColony();
-        if ((tileEntity == null || tileEntity.isInvalid()) && colony != null && colony.getWorld().getBlockState(this.getLocation()).getBlock() != null)
-        {
-            final TileEntity te = getColony().getWorld().getTileEntity(this.getLocation());
-            if (te instanceof TileEntityWareHouse)
-            {
-                tileEntity = (TileEntityWareHouse) te;
-                if (tileEntity.getBuilding() == null)
-                {
-                    tileEntity.setColony(colony);
-                    tileEntity.setBuilding(this);
-                }
-            }
-        }
-
-        return tileEntity;
+        return builder.build();
     }
 
     /**
@@ -272,7 +306,7 @@ public class BuildingWareHouse extends AbstractBuilding
      */
     public void upgradeContainers(final World world)
     {
-        if(storageUpgrade < MAX_STORAGE_UPGRADE)
+        if (storageUpgrade < MAX_STORAGE_UPGRADE)
         {
             for (final BlockPos pos : getAdditionalCountainers())
             {
@@ -285,19 +319,6 @@ public class BuildingWareHouse extends AbstractBuilding
             storageUpgrade++;
         }
         markDirty();
-    }
-
-    @Override
-    public int getMaxBuildingLevel()
-    {
-        return MAX_LEVEL;
-    }
-
-    @Override
-    public void serializeToView(@NotNull final ByteBuf buf)
-    {
-        super.serializeToView(buf);
-        buf.writeBoolean(storageUpgrade < MAX_STORAGE_UPGRADE);
     }
 
     /**

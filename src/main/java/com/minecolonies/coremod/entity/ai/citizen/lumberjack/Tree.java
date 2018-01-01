@@ -2,21 +2,24 @@ package com.minecolonies.coremod.entity.ai.citizen.lumberjack;
 
 import com.minecolonies.api.compatibility.Compatibility;
 import com.minecolonies.api.util.BlockPosUtil;
-import com.minecolonies.coremod.entity.ai.item.handling.ItemStorage;
+import com.minecolonies.api.util.ItemStackUtils;
+import com.minecolonies.api.crafting.ItemStorage;
+import com.minecolonies.coremod.colony.ColonyManager;
 import net.minecraft.block.Block;
-import net.minecraft.block.BlockNewLog;
-import net.minecraft.block.BlockOldLog;
+import net.minecraft.block.BlockLeaves;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
-import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.NonNullList;
 import net.minecraft.util.Tuple;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.Constants;
+import net.minecraftforge.oredict.OreDictionary;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,6 +28,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.minecolonies.api.util.constant.Constants.SAPLINGS;
 
 /**
  * Custom class for Trees. Used by lumberjack
@@ -72,6 +77,11 @@ public class Tree
     private static final int MAX_TREE_SIZE = 256;
 
     /**
+     * A lot of luck to get a guaranteed saplings drop.
+     */
+    private static final int A_LOT_OF_LUCK = 100;
+
+    /**
      * The location of the tree stump.
      */
     private BlockPos location;
@@ -97,6 +107,11 @@ public class Tree
     private boolean isTree;
 
     /**
+     * The spaling the lj has to use to replant the tree.
+     */
+    private ItemStack saplingToUse;
+
+    /**
      * The locations of the stumps (Some trees are connected to dirt by 4 logs).
      */
     private ArrayList<BlockPos> stumpLocations;
@@ -109,7 +124,7 @@ public class Tree
      * Jungle Sapling      :3
      * Acacia Sapling      :4
      * Dark Oak Sapling    :5
-     *
+     * <p>
      * Blue Slime Sapling      :0
      * Purple Slime Sapling    :1
      * Magma Slime Sapling     :2
@@ -140,10 +155,8 @@ public class Tree
     public Tree(@NotNull final World world, @NotNull final BlockPos log)
     {
         final Block block = BlockPosUtil.getBlock(world, log);
-        final BlockPos leaf = new BlockPos(log.getX()+1,log.getY()+5,log.getZ());
         if (block.isWood(world, log) || Compatibility.isSlimeBlock(block))
         {
-            variantNumber = calcVariantNumber(block, log, leaf, world);
             woodBlocks = new LinkedList<>();
             leaves = new LinkedList<>();
             location = log;
@@ -153,6 +166,7 @@ public class Tree
             addAndSearch(world);
 
             checkTree(world, topLog);
+            saplingToUse = calcSapling(world, leaves);
             stumpLocations = new ArrayList<>();
             woodBlocks.clear();
             final Block bottomBlock = world.getBlockState(location).getBlock();
@@ -160,39 +174,38 @@ public class Tree
         }
     }
 
-    /**
-     * Calculate the variant number of the tree.
-     * @param block from the block.
-     * @param log the position of it.
-     * @param leaf the leaf position.
-     * @param world the world access.
-     * @return the variant representation.
-     */
-    private static int calcVariantNumber(final Block block, final BlockPos log, final BlockPos leaf, final IBlockAccess world)
+    private static ItemStack calcSapling(final IBlockAccess world, final List<BlockPos> leaves)
     {
-        if (block instanceof BlockOldLog)
+        for(final BlockPos pos : leaves)
         {
-            return world.getBlockState(log).getValue(BlockOldLog.VARIANT).getMetadata();
-        }
+            final Block block = world.getBlockState(pos).getBlock();
 
-        if (block instanceof BlockNewLog)
-        {
-            return world.getBlockState(log).getValue(BlockNewLog.VARIANT).getMetadata();
+            if(block instanceof BlockLeaves)
+            {
+                final NonNullList<ItemStack> list = NonNullList.create();
+                block.getDrops(list, world, pos, world.getBlockState(pos), A_LOT_OF_LUCK);
+                for(final ItemStack stack: list)
+                {
+                    final int[] oreIds = OreDictionary.getOreIDs(stack);
+                    for(final int oreId: oreIds)
+                    {
+                        if(OreDictionary.getOreName(oreId).equals(SAPLINGS))
+                        {
+                            ColonyManager.getCompatabilityManager().connectLeaveToSapling(world.getBlockState(pos), stack);
+                            return stack;
+                        }
+                    }
+                }
+            }
         }
-
-        if (Compatibility.isSlimeBlock(block) && Compatibility.isSlimeLeaf(world.getBlockState(leaf).getBlock()))
-        {
-            return Compatibility.getLeafVariant(world.getBlockState(leaf));
-        }
-
-        return 0;
+        return ItemStackUtils.EMPTY;
     }
 
     /**
      * For use in PathJobFindTree.
      *
-     * @param world the world.
-     * @param pos   The coordinates.
+     * @param world      the world.
+     * @param pos        The coordinates.
      * @param treesToCut the trees the lumberjack is supposed to cut.
      * @return true if the log is part of a tree.
      */
@@ -213,8 +226,8 @@ public class Tree
 
         //Make sure tree is on solid ground and tree is not build above cobblestone.
         return world.getBlockState(basePos.down()).getMaterial().isSolid()
-                && world.getBlockState(basePos.down()).getBlock() != Blocks.COBBLESTONE
-                && hasEnoughLeavesAndIsSupposedToCut(world, baseAndTOp.getSecond(), treesToCut);
+                 && world.getBlockState(basePos.down()).getBlock() != Blocks.COBBLESTONE
+                 && hasEnoughLeavesAndIsSupposedToCut(world, baseAndTOp.getSecond(), treesToCut);
     }
 
     /**
@@ -226,11 +239,11 @@ public class Tree
      */
     @NotNull
     private static Tuple<BlockPos, BlockPos> getBottomAndTopLog(
-            @NotNull final IBlockAccess world,
-            @NotNull final BlockPos log,
-            @NotNull final LinkedList<BlockPos> woodenBlocks,
-            final BlockPos bottomLog,
-            final BlockPos topLog)
+                                                                 @NotNull final IBlockAccess world,
+                                                                 @NotNull final BlockPos log,
+                                                                 @NotNull final LinkedList<BlockPos> woodenBlocks,
+                                                                 final BlockPos bottomLog,
+                                                                 final BlockPos topLog)
     {
         BlockPos bottom = bottomLog == null ? log : bottomLog;
         BlockPos top = topLog == null ? log : topLog;
@@ -272,8 +285,9 @@ public class Tree
 
     /**
      * Check if the tree has enough leaves and the lj is supposed to cut them.
-     * @param world the world it is in.
-     * @param pos the position.
+     *
+     * @param world      the world it is in.
+     * @param pos        the position.
      * @param treesToCut the trees the lj is supposed to cut.
      * @return true if so.
      */
@@ -290,7 +304,7 @@ public class Tree
                     final BlockPos leafPos = pos.add(dx, dy, dz);
                     if (world.getBlockState(leafPos).getMaterial().equals(Material.LEAVES))
                     {
-                        if(!checkedLeaves && !supposedToCut(world, pos, treesToCut, leafPos))
+                        if (!checkedLeaves && !supposedToCut(world, treesToCut, leafPos))
                         {
                             return false;
                         }
@@ -310,28 +324,18 @@ public class Tree
 
     /**
      * Check if the Lj is supposed to cut a tree.
-     * @param world the world it is in.
-     * @param pos the position a leaf is at.
+     *
+     * @param world      the world it is in.
+     * @param pos        the position a leaf is at.
      * @param treesToCut the trees he is supposed to cut.
-     * @param leafPos
      * @return false if not.
      */
-    private static boolean supposedToCut(final IBlockAccess world, final BlockPos pos, final Map<ItemStorage, Boolean> treesToCut, final BlockPos leafPos)
+    private static boolean supposedToCut(final IBlockAccess world, final Map<ItemStorage, Boolean> treesToCut, final BlockPos leafPos)
     {
-        final IBlockState state = world.getBlockState(pos);
-
-        for(final ItemStorage stack: treesToCut.entrySet().stream().filter(entry -> !entry.getValue()).map(Map.Entry::getKey).collect(Collectors.toList()))
+        for (final ItemStorage stack : treesToCut.entrySet().stream().filter(entry -> !entry.getValue()).map(Map.Entry::getKey).collect(Collectors.toList()))
         {
-            final int variantNumber = calcVariantNumber(state.getBlock(), pos, leafPos, world);
-
-            if (Compatibility.isSlimeLeaf(world.getBlockState(leafPos).getBlock()))
-            {
-                if(Compatibility.isSlimeSapling(((ItemBlock) stack.getItem()).getBlock()) && variantNumber == stack.getItemStack().getMetadata())
-                {
-                    return false;
-                }
-            }
-            else if(!Compatibility.isSlimeSapling(((ItemBlock) stack.getItem()).getBlock()) && variantNumber == stack.getItemStack().getMetadata())
+            final ItemStack sap = ColonyManager.getCompatabilityManager().getSaplingForLeave(world.getBlockState(leafPos));
+            if(sap != null && sap.isItemEqual(stack.getItemStack()))
             {
                 return false;
             }
@@ -695,5 +699,13 @@ public class Tree
         BlockPosUtil.writeToNBT(compound, TAG_TOP_LOG, topLog);
 
         compound.setBoolean(TAG_IS_SLIME_TREE, slimeTree);
+    }
+
+    /**
+     * Get the right sapling of the tree.
+     */
+    public ItemStack getSapling()
+    {
+        return saplingToUse;
     }
 }

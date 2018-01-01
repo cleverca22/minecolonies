@@ -97,14 +97,14 @@ public class ItemScepterGuard extends AbstractItemMinecolonies
         }
 
         final BlockPos guardTower = BlockPosUtil.readFromNBT(compound, "pos");
-        final AbstractBuilding hut = colony.getBuilding(guardTower);
+        final AbstractBuilding hut = colony.getBuildingManager().getBuilding(guardTower);
         if (!(hut instanceof AbstractBuildingGuards))
         {
             return EnumActionResult.FAIL;
         }
         final AbstractBuildingGuards tower = (AbstractBuildingGuards) hut;
 
-        if(BlockPosUtil.getDistance2D(pos, guardTower) > tower.getPatrolDistance())
+        if (BlockPosUtil.getDistance2D(pos, guardTower) > tower.getPatrolDistance())
         {
             LanguageHandler.sendPlayerMessage(playerIn, "com.minecolonies.coremod.job.guard.toolClickGuardTooFar");
             return EnumActionResult.FAIL;

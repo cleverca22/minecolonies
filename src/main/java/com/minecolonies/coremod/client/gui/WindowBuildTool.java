@@ -8,6 +8,7 @@ import com.minecolonies.blockout.controls.Button;
 import com.minecolonies.blockout.views.DropDownList;
 import com.minecolonies.coremod.MineColonies;
 import com.minecolonies.coremod.colony.ColonyManager;
+import com.minecolonies.coremod.colony.StructureName;
 import com.minecolonies.coremod.colony.Structures;
 import com.minecolonies.coremod.items.ItemSupplyCampDeployer;
 import com.minecolonies.coremod.items.ItemSupplyChestDeployer;
@@ -280,10 +281,11 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         {
             Settings.instance.setupStaticMode(structureName, mode);
             staticSchematicName = structureName;
-            staticSchematicMode = true;
             Settings.instance.setRotation(rotation);
             this.rotation = rotation;
         }
+
+        staticSchematicMode = true;
         renameButton = findPaneOfTypeByID(BUTTON_RENAME, Button.class);
         deleteButton = findPaneOfTypeByID(BUTTON_DELETE, Button.class);
     }
@@ -302,6 +304,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         this.init(pos);
         renameButton = findPaneOfTypeByID(BUTTON_RENAME, Button.class);
         deleteButton = findPaneOfTypeByID(BUTTON_DELETE, Button.class);
+        this.staticSchematicMode = false;
     }
 
     private void init(final BlockPos pos)
@@ -361,7 +364,16 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      */
     private void paste(final boolean complete)
     {
-        final Structures.StructureName structureName = new Structures.StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
+        final String sname;
+        if(Settings.instance.isStaticSchematicMode())
+        {
+            sname = Settings.instance.getStaticSchematicName();
+        }
+        else
+        {
+            sname = schematics.get(schematicsDropDownList.getSelectedIndex());
+        }
+        final StructureName structureName = new StructureName(sname);
         if (structureName.getPrefix().equals(Structures.SCHEMATICS_SCAN) && FMLCommonHandler.instance().getMinecraftServerInstance() == null)
         {
             //We need to check that the server have it too using the md5
@@ -472,7 +484,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
             @Override
             public String getLabel(final int index)
             {
-                final Structures.StructureName sn = new Structures.StructureName(schematics.get(index));
+                final StructureName sn = new StructureName(schematics.get(index));
                 return sn.getLocalizedName();
             }
         });
@@ -493,7 +505,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     @Override
     public void onOpened()
     {
-        if(staticSchematicMode)
+        if(Settings.instance.isStaticSchematicMode())
         {
             sections.add(Structures.SCHEMATICS_PREFIX);
             setStructureName(staticSchematicName);
@@ -517,6 +529,11 @@ public class WindowBuildTool extends AbstractWindowSkeleton
             {
                 findPaneOfTypeByID(BUTTON_PASTE, Button.class).setVisible(true);
                 findPaneOfTypeByID(BUTTON_PASTE_NICE, Button.class).setVisible(true);
+            }
+            else
+            {
+                findPaneOfTypeByID(BUTTON_PASTE, Button.class).setVisible(false);
+                findPaneOfTypeByID(BUTTON_PASTE_NICE, Button.class).setVisible(false);
             }
 
             setStructureName(Settings.instance.getStructureName());
@@ -629,7 +646,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     {
         schematicsDropDownList.selectNext();
     }
-    
+
     /**
      * Go to the previous schematic.
      */
@@ -637,7 +654,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     {
         schematicsDropDownList.selectPrevious();
     }
-    
+
     /**
      * Update the list a available schematics.
      */
@@ -648,11 +665,11 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         {
             schematic = schematics.get(schematicsDropDownList.getSelectedIndex());
         }
-        final String currentSchematic = schematic.isEmpty() ? "" : (new Structures.StructureName(schematic)).getSchematic();
+        final String currentSchematic = schematic.isEmpty() ? "" : (new StructureName(schematic)).getSchematic();
         final String section = sections.get(sectionsDropDownList.getSelectedIndex());
         final String style = styles.get(stylesDropDownList.getSelectedIndex());
 
-        if(staticSchematicMode)
+        if(Settings.instance.isStaticSchematicMode())
         {
             schematics = new ArrayList<>();
             schematics.add(staticSchematicName);
@@ -664,7 +681,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         int newIndex = -1;
         for (int i = 0; i < schematics.size(); i++)
         {
-            final Structures.StructureName sn = new Structures.StructureName(schematics.get(i));
+            final StructureName sn = new StructureName(schematics.get(i));
             if (sn.getSchematic().equals(currentSchematic))
             {
                 newIndex = i;
@@ -686,7 +703,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         {
             enabled = schematics.size() > 1;
         }
-        
+
         findPaneOfTypeByID(BUTTON_PREVIOUS_SCHEMATIC_ID, Button.class).setEnabled(enabled);
         findPaneOfTypeByID(DROPDOWN_SCHEMATIC_ID, DropDownList.class).setEnabled(enabled);
         findPaneOfTypeByID(BUTTON_NEXT_SCHEMATIC_ID, Button.class).setEnabled(enabled);
@@ -700,28 +717,31 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      */
     private void onDropDownListChanged(final DropDownList list)
     {
-        if (list == sectionsDropDownList)
+        if(list.isEnabled())
         {
-            final String name = sections.get(sectionsDropDownList.getSelectedIndex());
-            if (Structures.SCHEMATICS_SCAN.equals(name))
+            if (list == sectionsDropDownList)
             {
-                renameButton.setVisible(true);
-                deleteButton.setVisible(true);
+                final String name = sections.get(sectionsDropDownList.getSelectedIndex());
+                if (Structures.SCHEMATICS_SCAN.equals(name))
+                {
+                    renameButton.setVisible(true);
+                    deleteButton.setVisible(true);
+                }
+                else
+                {
+                    renameButton.setVisible(false);
+                    deleteButton.setVisible(false);
+                }
+                updateStyles();
             }
-            else
+            else if (list == stylesDropDownList)
             {
-                renameButton.setVisible(false);
-                deleteButton.setVisible(false);
+                updateSchematics();
             }
-            updateStyles();
-        }
-        else if (list == stylesDropDownList)
-        {
-            updateSchematics();
-        }
-        else if (list == schematicsDropDownList)
-        {
-            changeSchematic();
+            else if (list == schematicsDropDownList)
+            {
+                changeSchematic();
+            }
         }
     }
 
@@ -735,7 +755,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     {
         if (structureName != null)
         {
-            final Structures.StructureName sn = new Structures.StructureName(structureName);
+            final StructureName sn = new StructureName(structureName);
             final int sectionIndex = sections.indexOf(sn.getSection());
             if (sectionIndex != -1)
             {
@@ -853,8 +873,17 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      */
     private void changeSchematic()
     {
-        final String sname = schematics.get(schematicsDropDownList.getSelectedIndex());
-        final Structures.StructureName structureName = new Structures.StructureName(sname);
+        final String sname;
+        if(Settings.instance.isStaticSchematicMode())
+        {
+            sname = Settings.instance.getStaticSchematicName();
+        }
+        else
+        {
+            sname = schematics.get(schematicsDropDownList.getSelectedIndex());
+        }
+
+        final StructureName structureName = new StructureName(sname);
         final Structure structure = new Structure(null,
                 structureName.toString(),
                 new PlacementSettings().setRotation(BlockUtils.getRotation(Settings.instance.getRotation())).setMirror(Settings.instance.getMirror()));
@@ -899,7 +928,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      * @param complete if pasted, should it be complete.
      * @param structureName of the scan to be built.
      */
-    private void requestScannedSchematic(@NotNull final Structures.StructureName structureName, final boolean paste, final boolean complete)
+    private void requestScannedSchematic(@NotNull final StructureName structureName, final boolean paste, final boolean complete)
     {
         if (!Structures.isPlayerSchematicsAllowed())
         {
@@ -910,7 +939,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
         {
             final String md5 = Structures.getMD5(structureName.toString());
             final String serverSideName = Structures.SCHEMATICS_CACHE + '/' + md5;
-            if (!Structures.hasMD5(new Structures.StructureName(serverSideName)))
+            if (!Structures.hasMD5(new StructureName(serverSideName)))
             {
                 final InputStream stream = Structure.getStream(structureName.toString());
                 if (stream != null)
@@ -961,13 +990,13 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      */
     private void confirmClicked()
     {
-        if(Settings.instance.isStaticSchematicMode())
+        if(Settings.instance.isStaticSchematicMode() && Settings.instance.getActiveStructure() != null)
         {
             checkAndPlace();
         }
         else
         {
-            final Structures.StructureName structureName = new Structures.StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
+            final StructureName structureName = new StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
             if (structureName.getPrefix().equals(Structures.SCHEMATICS_SCAN) && FMLCommonHandler.instance().getMinecraftServerInstance() == null)
             {
                 //We need to check that the server have it too using the md5
@@ -991,9 +1020,9 @@ public class WindowBuildTool extends AbstractWindowSkeleton
 
     private void checkAndPlace()
     {
-        if(FreeMode.SUPPLYSHIP == Settings.instance.getFreeMode())
+        if (FreeMode.SUPPLYSHIP == Settings.instance.getFreeMode())
         {
-            if(ItemSupplyChestDeployer.canShipBePlaced(Minecraft.getMinecraft().world, Settings.instance.getPosition(),
+            if (ItemSupplyChestDeployer.canShipBePlaced(Minecraft.getMinecraft().world, Settings.instance.getPosition(),
                     Settings.instance.getActiveStructure().getSize(BlockUtils.getRotation(Settings.instance.getRotation()))))
             {
                 pasteNice();
@@ -1003,9 +1032,9 @@ public class WindowBuildTool extends AbstractWindowSkeleton
                 LanguageHandler.sendPlayerMessage(Minecraft.getMinecraft().player, "item.supplyChestDeployer.invalid");
             }
         }
-        else if(FreeMode.SUPPLYCAMP == Settings.instance.getFreeMode())
+        else if (FreeMode.SUPPLYCAMP == Settings.instance.getFreeMode())
         {
-            if(ItemSupplyCampDeployer.canCampBePlaced(Minecraft.getMinecraft().world, Settings.instance.getPosition(),
+            if (ItemSupplyCampDeployer.canCampBePlaced(Minecraft.getMinecraft().world, Settings.instance.getPosition(),
                     Settings.instance.getActiveStructure().getSize(BlockUtils.getRotation(Settings.instance.getRotation()))))
             {
                 pasteNice();
@@ -1015,7 +1044,6 @@ public class WindowBuildTool extends AbstractWindowSkeleton
                 LanguageHandler.sendPlayerMessage(Minecraft.getMinecraft().player, "item.supplyCampDeployer.invalid");
             }
         }
-
 
         Settings.instance.reset();
         close();
@@ -1065,7 +1093,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
      */
     private void renameClicked()
     {
-        final Structures.StructureName structureName = new Structures.StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
+        final StructureName structureName = new StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
         @NotNull final WindowStructureNameEntry window = new WindowStructureNameEntry(structureName);
         window.open();
     }
@@ -1077,7 +1105,7 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     {
         confirmDeleteDialog = new DialogDoneCancel(getWindow());
         confirmDeleteDialog.setHandler(this::onDialogClosed);
-        final Structures.StructureName structureName = new Structures.StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
+        final StructureName structureName = new StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
         confirmDeleteDialog.setTitle(LanguageHandler.format("com.minecolonies.coremod.gui.structure.delete.title"));
         confirmDeleteDialog.setTextContent(LanguageHandler.format("com.minecolonies.coremod.gui.structure.delete.body", structureName.toString()));
         confirmDeleteDialog.open();
@@ -1093,9 +1121,9 @@ public class WindowBuildTool extends AbstractWindowSkeleton
     {
         if (dialog == confirmDeleteDialog && buttonId == DialogDoneCancel.DONE)
         {
-            final Structures.StructureName structureName = new Structures.StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
+            final StructureName structureName = new StructureName(schematics.get(schematicsDropDownList.getSelectedIndex()));
             if (Structures.SCHEMATICS_SCAN.equals(structureName.getPrefix())
-                && Structures.deleteScannedStructure(structureName))
+                    && Structures.deleteScannedStructure(structureName))
             {
                 Structures.loadScannedStyleMaps();
                 if (schematics.size() > 1)

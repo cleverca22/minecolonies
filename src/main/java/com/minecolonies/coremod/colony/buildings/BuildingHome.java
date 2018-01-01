@@ -6,7 +6,6 @@ import com.minecolonies.coremod.client.gui.WindowHomeBuilding;
 import com.minecolonies.coremod.colony.CitizenData;
 import com.minecolonies.coremod.colony.Colony;
 import com.minecolonies.coremod.colony.ColonyView;
-import com.minecolonies.coremod.entity.EntityCitizen;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockBed;
@@ -61,11 +60,6 @@ public class BuildingHome extends AbstractBuildingHut
     private final List<BlockPos> bedList = new ArrayList<>();
 
     /**
-     * Boolean value describing if any citizen needs food.
-     */
-    private boolean isFoodNeeded = false;
-
-    /**
      * Instantiates a new citizen hut.
      *
      * @param c the colony.
@@ -86,7 +80,7 @@ public class BuildingHome extends AbstractBuildingHut
         final int[] residentIds = compound.getIntArray(TAG_RESIDENTS);
         for (final int citizenId : residentIds)
         {
-            final CitizenData citizen = getColony().getCitizen(citizenId);
+            final CitizenData citizen = getColony().getCitizenManager().getCitizen(citizenId);
             if (citizen != null)
             {
                 // Bypass addResident (which marks dirty)
@@ -98,7 +92,11 @@ public class BuildingHome extends AbstractBuildingHut
         for (int i = 0; i < bedTagList.tagCount(); ++i)
         {
             final NBTTagCompound bedCompound = bedTagList.getCompoundTagAt(i);
-            bedList.add(NBTUtil.getPosFromTag(bedCompound));
+            final BlockPos bedPos = NBTUtil.getPosFromTag(bedCompound);
+            if(!bedList.contains(bedPos))
+            {
+                bedList.add(bedPos);
+            }
         }
     }
 
@@ -106,7 +104,7 @@ public class BuildingHome extends AbstractBuildingHut
     public void onWakeUp()
     {
         final World world = getColony().getWorld();
-        if(world == null)
+        if (world == null)
         {
             return;
         }
@@ -116,18 +114,12 @@ public class BuildingHome extends AbstractBuildingHut
             IBlockState state = world.getBlockState(pos);
             state = state.getBlock().getActualState(state, world, pos);
             if (state.getBlock() instanceof BlockBed
-                    && !state.getValue(BlockBed.OCCUPIED)
+                    && state.getValue(BlockBed.OCCUPIED)
                     && state.getValue(BlockBed.PART).equals(BlockBed.EnumPartType.HEAD))
             {
                 world.setBlockState(pos, state.withProperty(BlockBed.OCCUPIED, false), 0x03);
             }
         }
-    }
-
-    @NotNull
-    public List<BlockPos> getBedList()
-    {
-        return new ArrayList<>(bedList);
     }
 
     @NotNull
@@ -165,7 +157,7 @@ public class BuildingHome extends AbstractBuildingHut
     @Override
     public void registerBlockPosition(@NotNull final Block block, @NotNull final BlockPos pos, @NotNull final World world)
     {
-        if (block == Blocks.BED)
+        if (block == Blocks.BED && !bedList.contains(pos))
         {
             bedList.add(pos);
         }
@@ -175,8 +167,8 @@ public class BuildingHome extends AbstractBuildingHut
     public void onDestroyed()
     {
         residents.stream()
-                .filter(Objects::nonNull)
-                .forEach(citizen -> citizen.setHomeBuilding(null));
+          .filter(Objects::nonNull)
+          .forEach(citizen -> citizen.setHomeBuilding(null));
         residents.clear();
         super.onDestroyed();
     }
@@ -208,33 +200,6 @@ public class BuildingHome extends AbstractBuildingHut
     }
 
     @Override
-    public boolean needsAnything()
-    {
-        return super.needsAnything() || isFoodNeeded();
-    }
-
-
-    /**
-     * Set food requirements for the building.
-     *
-     * @param foodNeeded set true if required.
-     */
-    public void setFoodNeeded(final boolean foodNeeded)
-    {
-        isFoodNeeded = foodNeeded;
-    }
-
-    /**
-     * Check food requirements of the building.
-     *
-     * @return true of false.
-     */
-    public boolean isFoodNeeded()
-    {
-        return isFoodNeeded;
-    }
-
-    @Override
     public int getMaxInhabitants()
     {
         return getBuildingLevel();
@@ -246,16 +211,12 @@ public class BuildingHome extends AbstractBuildingHut
      */
     private void addHomelessCitizens()
     {
-        for (@NotNull final CitizenData citizen : getColony().getCitizens().values())
+        for (@NotNull final CitizenData citizen : getColony().getCitizenManager().getCitizens())
         {
             // Move the citizen to a better hut
-            if (citizen.getHomeBuilding() != null && citizen.getHomeBuilding().getBuildingLevel() < this.getBuildingLevel())
+            if (citizen.getHomeBuilding() instanceof BuildingHome && citizen.getHomeBuilding().getBuildingLevel() < this.getBuildingLevel())
             {
-                if(citizen.getHomeBuilding() instanceof BuildingHome)
-                {
-                    // The citizen can move to this hut to improve conditions
-                    citizen.getHomeBuilding().removeCitizen(citizen);
-                }
+                citizen.getHomeBuilding().removeCitizen(citizen);
             }
             if (citizen.getHomeBuilding() == null)
             {
@@ -267,16 +228,6 @@ public class BuildingHome extends AbstractBuildingHut
                 }
             }
         }
-    }
-
-    /**
-     * Checks if the building is full.
-     *
-     * @return true if so.
-     */
-    public boolean isFull()
-    {
-        return residents.size() >= getMaxInhabitants();
     }
 
     /**
@@ -292,6 +243,16 @@ public class BuildingHome extends AbstractBuildingHut
         markDirty();
     }
 
+    /**
+     * Checks if the building is full.
+     *
+     * @return true if so.
+     */
+    public boolean isFull()
+    {
+        return residents.size() >= getMaxInhabitants();
+    }
+
     @Override
     public int getMaxBuildingLevel()
     {
@@ -305,11 +266,11 @@ public class BuildingHome extends AbstractBuildingHut
 
         if (newLevel == 1)
         {
-            this.getColony().triggerAchievement(ModAchievements.achievementBuildingColonist);
+            this.getColony().getStatsManager().triggerAchievement(ModAchievements.achievementBuildingColonist, this.getColony());
         }
         if (newLevel >= this.getMaxBuildingLevel())
         {
-            this.getColony().triggerAchievement(ModAchievements.achievementUpgradeColonistMax);
+            this.getColony().getStatsManager().triggerAchievement(ModAchievements.achievementUpgradeColonistMax, this.getColony());
         }
     }
 
@@ -329,7 +290,13 @@ public class BuildingHome extends AbstractBuildingHut
     public void setBuildingLevel(final int level)
     {
         super.setBuildingLevel(level);
-        getColony().calculateMaxCitizens();
+        getColony().getCitizenManager().calculateMaxCitizens(getColony());
+    }
+
+    @NotNull
+    public List<BlockPos> getBedList()
+    {
+        return new ArrayList<>(bedList);
     }
 
     /**
@@ -341,15 +308,6 @@ public class BuildingHome extends AbstractBuildingHut
     public boolean hasResident(final CitizenData citizen)
     {
         return residents.contains(citizen);
-    }
-
-    /**
-     * Checks if food in the home is required.
-     * If yes set foodNeeded to true, else to false.
-     */
-    public void checkIfFoodNeeded()
-    {
-        setFoodNeeded(residents.stream().filter(resident -> resident.getSaturation() < EntityCitizen.HIGH_SATURATION).findFirst().isPresent());
     }
 
     /**

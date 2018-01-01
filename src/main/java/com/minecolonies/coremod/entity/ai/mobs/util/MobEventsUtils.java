@@ -35,14 +35,13 @@ public final class MobEventsUtils
     private static final int    PREFERRED_MAX_CHIEFS         = 2;
     private static final int    MIN_CITIZENS_FOR_RAID        = 5;
     private static final int    NUMBER_OF_CITIZENS_NEEDED    = 5;
-    private static       int    numberOfBarbarians           = 0;
-    private static       int    numberOfArchers              = 0;
-    private static       int    numberOfChiefs               = 0;
-
     /**
      * Spawn modifier to decrease the spawnrate.
      */
     private static final int SPAWN_MODIFIER = 3;
+    private static       int    numberOfBarbarians           = 0;
+    private static       int    numberOfArchers              = 0;
+    private static       int    numberOfChiefs               = 0;
 
     /**
      * Private constructor to hide the implicit public one.
@@ -53,7 +52,7 @@ public final class MobEventsUtils
 
     public static void barbarianEvent(final World world, final Colony colony)
     {
-        if(world == null || !colony.isCanHaveBarbEvents())
+        if (world == null || !colony.isCanHaveBarbEvents())
         {
             return;
         }
@@ -62,7 +61,7 @@ public final class MobEventsUtils
 
         final BlockPos targetSpawnPoint = calculateSpawnLocation(world, colony);
 
-        if(targetSpawnPoint.equals(colony.getCenter()))
+        if (targetSpawnPoint.equals(colony.getCenter()))
         {
             return;
         }
@@ -90,7 +89,7 @@ public final class MobEventsUtils
      */
     private static void numberOfSpawns(final Colony colony)
     {
-        if (colony.getCitizens().size() < MIN_CITIZENS_FOR_RAID)
+        if (colony.getCitizenManager().getCitizens().size() < MIN_CITIZENS_FOR_RAID)
         {
             return;
         }
@@ -131,11 +130,11 @@ public final class MobEventsUtils
     private static BlockPos calculateSpawnLocation(final World world, @NotNull final Colony colony)
     {
         final Random random = new Random();
-        final BlockPos pos = colony.getRandomOutsiderInDirection(
-                random.nextInt(2) < 1 ? EnumFacing.EAST : EnumFacing.WEST,
-                random.nextInt(2) < 1 ? EnumFacing.NORTH : EnumFacing.SOUTH);
+        final BlockPos pos = colony.getBarbManager().getRandomOutsiderInDirection(
+          random.nextInt(2) < 1 ? EnumFacing.EAST : EnumFacing.WEST,
+          random.nextInt(2) < 1 ? EnumFacing.NORTH : EnumFacing.SOUTH, colony);
 
-        if(pos.equals(colony.getCenter()))
+        if (pos.equals(colony.getCenter()))
         {
             return colony.getCenter();
         }
@@ -154,7 +153,7 @@ public final class MobEventsUtils
         int levels = 0;
 
         @NotNull final List<CitizenData> citizensList = new ArrayList<>();
-        citizensList.addAll(colony.getCitizens().values());
+        citizensList.addAll(colony.getCitizenManager().getCitizens());
 
         for (@NotNull final CitizenData citizen : citizensList)
         {
@@ -189,42 +188,42 @@ public final class MobEventsUtils
 
     public static boolean isItTimeToRaid(final World world, final Colony colony)
     {
-        if (colony.getCitizens().size() < NUMBER_OF_CITIZENS_NEEDED)
+        if (colony.getCitizenManager().getCitizens().size() < NUMBER_OF_CITIZENS_NEEDED)
         {
             return false;
         }
 
         if (world.isDaytime() && !colony.isHasRaidBeenCalculated())
         {
-            colony.setHasRaidBeenCalculated(true);
-            if(!colony.hasWillRaidTonight())
+            colony.getBarbManager().setHasRaidBeenCalculated(true);
+            if (!colony.hasWillRaidTonight())
             {
                 final boolean raid = raidThisNight(world);
                 if (Configurations.gameplay.enableInDevelopmentFeatures)
                 {
                     LanguageHandler.sendPlayersMessage(
-                            colony.getMessageEntityPlayers(),
-                            "Will raid tonight: " + raid);
+                      colony.getMessageEntityPlayers(),
+                      "Will raid tonight: " + raid);
                 }
-                colony.setWillRaidTonight(raid);
+                colony.getBarbManager().setWillRaidTonight(raid);
             }
             return false;
         }
         else if (colony.hasWillRaidTonight() && !world.isDaytime() && colony.isHasRaidBeenCalculated())
         {
-            colony.setHasRaidBeenCalculated(false);
-            colony.setWillRaidTonight(false);
+            colony.getBarbManager().setHasRaidBeenCalculated(false);
+            colony.getBarbManager().setWillRaidTonight(false);
             if (Configurations.gameplay.enableInDevelopmentFeatures)
             {
                 LanguageHandler.sendPlayersMessage(
-                        colony.getMessageEntityPlayers(),
-                        "Night reached: raiding");
+                  colony.getMessageEntityPlayers(),
+                  "Night reached: raiding");
             }
             return true;
         }
         else if (!world.isDaytime() && colony.isHasRaidBeenCalculated())
         {
-            colony.setHasRaidBeenCalculated(false);
+            colony.getBarbManager().setHasRaidBeenCalculated(false);
         }
 
         return false;

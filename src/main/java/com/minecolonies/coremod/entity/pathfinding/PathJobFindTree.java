@@ -1,7 +1,7 @@
 package com.minecolonies.coremod.entity.pathfinding;
 
 import com.minecolonies.coremod.entity.ai.citizen.lumberjack.Tree;
-import com.minecolonies.coremod.entity.ai.item.handling.ItemStorage;
+import com.minecolonies.api.crafting.ItemStorage;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
@@ -33,18 +33,19 @@ public class PathJobFindTree extends AbstractPathJob
 
     /**
      * AbstractPathJob constructor.
-     * @param world the world within which to path.
-     * @param start the start position from which to path from.
-     * @param home  the position of the workers hut.
-     * @param range maximum path range.
+     *
+     * @param world      the world within which to path.
+     * @param start      the start position from which to path from.
+     * @param home       the position of the workers hut.
+     * @param range      maximum path range.
      * @param treesToCut the trees the lj is supposed to cut.
      */
     public PathJobFindTree(
-            final World world,
-            @NotNull final BlockPos start,
-            final BlockPos home,
-            final int range,
-            final Map<ItemStorage, Boolean> treesToCut)
+                            final World world,
+                            @NotNull final BlockPos start,
+                            final BlockPos home,
+                            final int range,
+                            final Map<ItemStorage, Boolean> treesToCut)
     {
         super(world, start, start, range, new TreePathResult());
         this.treesToCut = treesToCut;

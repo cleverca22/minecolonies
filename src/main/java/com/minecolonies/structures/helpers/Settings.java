@@ -70,21 +70,21 @@ public final class Settings
     /**
      * set the position.
      *
-     * @param position to render
-     */
-    public void setPosition(final BlockPos position)
-    {
-        pos = position;
-    }
-
-    /**
-     * get the position.
-     *
      * @return the position
      */
     public BlockPos getPosition()
     {
         return pos;
+    }
+
+    /**
+     * set the position.
+     *
+     * @param position to render
+     */
+    public void setPosition(final BlockPos position)
+    {
+        pos = position;
     }
 
     /**
@@ -142,23 +142,19 @@ public final class Settings
         offset.setPos(0, 0, 0);
         rotation = 0;
         isMirrored = false;
+        staticSchematicMode = false;
     }
 
     /**
      * Saves the schematic info when the client closes the build tool window.
      *
-     * @param structureName  name of the structure.
-     * @param rotation The number of times the building is rotated.
+     * @param structureName name of the structure.
+     * @param rotation      The number of times the building is rotated.
      */
     public void setSchematicInfo(final String structureName, final int rotation)
     {
         this.structureName = structureName;
         this.rotation = rotation;
-    }
-
-    public void setStructureName(final String structureName)
-    {
-        this.structureName = structureName;
     }
 
     /**
@@ -167,6 +163,11 @@ public final class Settings
     public String getStructureName()
     {
         return structureName;
+    }
+
+    public void setStructureName(final String structureName)
+    {
+        this.structureName = structureName;
     }
 
     /**

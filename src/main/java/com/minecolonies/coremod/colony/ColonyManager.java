@@ -3,6 +3,8 @@ package com.minecolonies.coremod.colony;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.permissions.Player;
 import com.minecolonies.api.colony.permissions.Rank;
+import com.minecolonies.api.compatibility.CompatabilityManager;
+import com.minecolonies.api.compatibility.ICompatabilityManager;
 import com.minecolonies.api.configuration.Configurations;
 import com.minecolonies.api.util.LanguageHandler;
 import com.minecolonies.api.util.Log;
@@ -10,6 +12,7 @@ import com.minecolonies.coremod.MineColonies;
 import com.minecolonies.coremod.achievements.ModAchievements;
 import com.minecolonies.coremod.blocks.AbstractBlockHut;
 import com.minecolonies.coremod.colony.buildings.AbstractBuilding;
+import com.minecolonies.coremod.colony.buildings.views.AbstractBuildingView;
 import com.minecolonies.coremod.entity.EntityCitizen;
 import com.minecolonies.coremod.util.AchievementUtils;
 import io.netty.buffer.ByteBuf;
@@ -21,6 +24,7 @@ import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.DamageSource;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldServerMulti;
 import net.minecraftforge.common.DimensionManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.util.Constants.NBT;
@@ -34,6 +38,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.*;
+
+import static com.minecolonies.api.util.constant.NbtTagConstants.TAG_COLONIES;
+import static com.minecolonies.api.util.constant.NbtTagConstants.TAG_COMPATABILITY_MANAGER;
+import static com.minecolonies.api.util.constant.NbtTagConstants.TAG_UUID;
 
 /**
  * Singleton class that links colonies to minecraft.
@@ -54,15 +62,6 @@ public final class ColonyManager
      * The file name pattern of the minecolonies backup.
      */
     private static final String FILENAME_MINECOLONIES_BACKUP = "colonies-%s.dat";
-
-    /**
-     * The tag of the colonies.
-     */
-    private static final String                     TAG_COLONIES          = "colonies";
-    /**
-     * The tag of the pseudo unique identifier
-     */
-    private static final String                     TAG_UUID              = "uuid";
 
     /**
      * The damage source used to kill citizens.
@@ -87,16 +86,18 @@ public final class ColonyManager
     /**
      * A buffer value to be sure to be outside of the colony.
      */
-    private static final int BUFFER = 10;
+    private static final int BUFFER                    = 10;
 
     /**
      * The last colony id.
      */
     private static int topColonyId = 0;
+
     /**
      * Amount of worlds loaded.
      */
     private static int     numWorldsLoaded;
+
     /**
      * Whether the colonyManager should persist data.
      */
@@ -106,11 +107,16 @@ public final class ColonyManager
      * Indicate if a schematic have just been downloaded.
      * Client only
      */
-    private static boolean schematicDownloaded = false;
+    private static          boolean schematicDownloaded = false;
     /**
      * Pseudo unique id for the server
      */
-    private static volatile UUID serverUUID = null;
+    private static volatile UUID    serverUUID          = null;
+
+    /**
+     * Creates a new compatabilityManager.
+     */
+    private static final ICompatabilityManager compatabilityManager = new CompatabilityManager();
 
     private ColonyManager()
     {
@@ -123,12 +129,14 @@ public final class ColonyManager
      * @param w      World of the colony.
      * @param pos    Coordinate of the center of the colony.
      * @param player the player that creates the colony - owner.
+     * @param style the default style of the colony.
      * @return The created colony.
      */
     @NotNull
-    public static Colony createColony(@NotNull final World w, final BlockPos pos, @NotNull final EntityPlayer player)
+    public static Colony createColony(@NotNull final World w, final BlockPos pos, @NotNull final EntityPlayer player, @NotNull final String style)
     {
         final Colony colony = colonies.create(w, pos);
+        colony.setStyle(style);
 
         addColonyByWorld(colony);
 
@@ -136,8 +144,8 @@ public final class ColonyManager
         colony.setName(colonyName);
         colony.getPermissions().setPlayerRank(player.getGameProfile().getId(), Rank.OWNER, w);
 
-        colony.triggerAchievement(ModAchievements.achievementGetSupply);
-        colony.triggerAchievement(ModAchievements.achievementTownhall);
+        colony.getStatsManager().triggerAchievement(ModAchievements.achievementGetSupply, colony);
+        colony.getStatsManager().triggerAchievement(ModAchievements.achievementTownhall, colony);
 
         markDirty();
 
@@ -148,7 +156,7 @@ public final class ColonyManager
 
     private static void addColonyByWorld(final Colony colony)
     {
-        if(colony.getDimension() >= 0)
+        if (colony.getDimension() >= 0)
         {
             coloniesByWorld.computeIfAbsent(colony.getDimension(), ArrayList::new).add(colony);
         }
@@ -167,7 +175,7 @@ public final class ColonyManager
      *
      * @param id the colonies id.
      */
-    public static void deleteColony(final int id)
+    public static void deleteColony(final int id, final boolean canDestroy)
     {
         try
         {
@@ -175,7 +183,7 @@ public final class ColonyManager
 
             final Set<World> colonyWorlds = new HashSet<>();
             Log.getLogger().info("Removing citizens for " + id);
-            for (final CitizenData citizenData : new ArrayList<>(colony.getCitizens().values()))
+            for (final CitizenData citizenData : new ArrayList<>(colony.getCitizenManager().getCitizens()))
             {
                 Log.getLogger().info("Kill Citizen " + citizenData.getName());
                 final EntityCitizen entityCitizen = citizenData.getCitizenEntity();
@@ -186,19 +194,22 @@ public final class ColonyManager
                     colonyWorlds.add(world);
                 }
             }
-            Log.getLogger().info("Removing buildings for " + id);
-            for (final AbstractBuilding building : new ArrayList<>(colony.getBuildings().values()))
+            if (canDestroy)
             {
-                final BlockPos location = building.getLocation();
-                Log.getLogger().info("Delete Building at " + location);
-                building.deconstruct();
-                building.destroy();
-                for (final World world : colonyWorlds)
+                Log.getLogger().info("Removing buildings for " + id);
+                for (final AbstractBuilding building : new ArrayList<>(colony.getBuildingManager().getBuildings().values()))
                 {
-                    if (world.getBlockState(location).getBlock() instanceof AbstractBlockHut)
+                    final BlockPos location = building.getLocation();
+                    Log.getLogger().info("Delete Building at " + location);
+                    building.deconstruct();
+                    building.destroy();
+                    for (final World world : colonyWorlds)
                     {
-                        Log.getLogger().info("Found Block, deleting " + world.getBlockState(location).getBlock());
-                        world.setBlockToAir(location);
+                        if (world.getBlockState(location).getBlock() instanceof AbstractBlockHut)
+                        {
+                            Log.getLogger().info("Found Block, deleting " + world.getBlockState(location).getBlock());
+                            world.setBlockToAir(location);
+                        }
                     }
                 }
             }
@@ -248,7 +259,7 @@ public final class ColonyManager
         @Nullable final Colony colony = getColony(w, pos);
         if (colony != null)
         {
-            final AbstractBuilding building = colony.getBuilding(pos);
+            final AbstractBuilding building = colony.getBuildingManager().getBuilding(pos);
             if (building != null)
             {
                 return building;
@@ -258,7 +269,7 @@ public final class ColonyManager
         //  Fallback - there might be a AbstractBuilding for this block, but it's outside of it's owning colony's radius.
         for (@NotNull final Colony otherColony : getColonies(w))
         {
-            final AbstractBuilding building = otherColony.getBuilding(pos);
+            final AbstractBuilding building = otherColony.getBuildingManager().getBuilding(pos);
             if (building != null)
             {
                 return building;
@@ -324,6 +335,7 @@ public final class ColonyManager
 
     /**
      * Get all colonies in all worlds.
+     *
      * @param abandonedSince time in hours since the last contact.
      * @return a list of colonies.
      */
@@ -333,7 +345,7 @@ public final class ColonyManager
         final List<Colony> sortedList = new ArrayList<>();
         for (final Colony colony : colonies.getCopyAsList())
         {
-            if(colony.getLastContactInHours() >= abandonedSince)
+            if (colony.getLastContactInHours() >= abandonedSince)
             {
                 sortedList.add(colony);
             }
@@ -342,19 +354,18 @@ public final class ColonyManager
         return sortedList;
     }
 
-
     /**
      * Get a AbstractBuilding by position.
      *
      * @param pos Block position.
      * @return Returns the view belonging to the building at (x, y, z).
      */
-    public static AbstractBuilding.View getBuildingView(final BlockPos pos)
+    public static AbstractBuildingView getBuildingView(final BlockPos pos)
     {
         //  On client we will just check all known views
         for (@NotNull final ColonyView colony : colonyViews)
         {
-            final AbstractBuilding.View building = colony.getBuilding(pos);
+            final AbstractBuildingView building = colony.getBuilding(pos);
             if (building != null)
             {
                 return building;
@@ -611,6 +622,10 @@ public final class ColonyManager
         {
             compound.setUniqueId(TAG_UUID, serverUUID);
         }
+
+        final NBTTagCompound compCompound = new NBTTagCompound();
+        compatabilityManager.writeToNBT(compCompound);
+        compound.setTag(TAG_COMPATABILITY_MANAGER, compCompound);
     }
 
     /**
@@ -682,7 +697,7 @@ public final class ColonyManager
      */
     public static void onWorldLoad(@NotNull final World world)
     {
-        if (!world.isRemote)
+        if (!world.isRemote && !(world instanceof WorldServerMulti))
         {
             if (numWorldsLoaded == 0)
             {
@@ -698,7 +713,7 @@ public final class ColonyManager
                 @Nullable final NBTTagCompound data = loadNBTFromPath(file);
                 if (data != null)
                 {
-                    readFromNBT(data);
+                    readFromNBT(data, world);
                 }
                 if (serverUUID == null)
                 {
@@ -780,12 +795,12 @@ public final class ColonyManager
      *
      * @param compound NBT Tag.
      */
-    public static void readFromNBT(@NotNull final NBTTagCompound compound)
+    public static void readFromNBT(@NotNull final NBTTagCompound compound, @NotNull final World world)
     {
         final NBTTagList colonyTags = compound.getTagList(TAG_COLONIES, NBT.TAG_COMPOUND);
         for (int i = 0; i < colonyTags.tagCount(); ++i)
         {
-            @NotNull final Colony colony = Colony.loadColony(colonyTags.getCompoundTagAt(i));
+            @NotNull final Colony colony = Colony.loadColony(colonyTags.getCompoundTagAt(i), world);
             colonies.add(colony);
 
             addColonyByWorld(colony);
@@ -795,6 +810,12 @@ public final class ColonyManager
         {
             serverUUID = compound.getUniqueId(TAG_UUID);
         }
+
+        if(compound.hasKey(TAG_COMPATABILITY_MANAGER))
+        {
+            compatabilityManager.readFromNBT(compound.getCompoundTag(TAG_COMPATABILITY_MANAGER));
+        }
+        compatabilityManager.discover(world);
 
         Log.getLogger().info(String.format("Loaded %d colonies", colonies.size()));
     }
@@ -813,16 +834,6 @@ public final class ColonyManager
     }
 
     /**
-     * Set the server UUID.
-     *
-     * @param uuid the universal unique id
-     */
-    public static void setServerUUID(final UUID uuid)
-    {
-        serverUUID = uuid;
-    }
-
-    /**
      * Get the Universal Unique ID for the server.
      *
      * @return the server Universal Unique ID for ther
@@ -833,6 +844,16 @@ public final class ColonyManager
     }
 
     /**
+     * Set the server UUID.
+     *
+     * @param uuid the universal unique id
+     */
+    public static void setServerUUID(final UUID uuid)
+    {
+        serverUUID = uuid;
+    }
+
+    /**
      * When a world unloads, all colonies in that world are informed.
      * Additionally, when the last world is unloaded, delete all colonies.
      *
@@ -840,9 +861,9 @@ public final class ColonyManager
      */
     public static void onWorldUnload(@NotNull final World world)
     {
-        if (!world.isRemote)
+        if (!world.isRemote && !(world instanceof WorldServerMulti))
         {
-            if(world.provider.getDimension() == 0)
+            if (world.provider.getDimension() == 0)
             {
                 saveColonies();
             }
@@ -871,7 +892,7 @@ public final class ColonyManager
      * @return the response message.
      */
     @Nullable
-    public static IMessage handleColonyViewMessage(final int colonyId, @NotNull final ByteBuf colonyData, final boolean isNewSubscription)
+    public static IMessage handleColonyViewMessage(final int colonyId, @NotNull final ByteBuf colonyData, @NotNull final World world, final boolean isNewSubscription)
     {
         ColonyView view = getColonyView(colonyId);
         if (view == null)
@@ -880,7 +901,7 @@ public final class ColonyManager
             colonyViews.add(view);
         }
 
-        return view.handleColonyViewMessage(colonyData, isNewSubscription);
+        return view.handleColonyViewMessage(colonyData, world, isNewSubscription);
     }
 
     /**
@@ -1094,5 +1115,14 @@ public final class ColonyManager
             }
         }
         return false;
+    }
+
+    /**
+     * Get an instance of the compatabilityManager.
+     * @return the manager.
+     */
+    public static ICompatabilityManager getCompatabilityManager()
+    {
+        return compatabilityManager;
     }
 }

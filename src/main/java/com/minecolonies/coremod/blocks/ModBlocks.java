@@ -1,16 +1,17 @@
 package com.minecolonies.coremod.blocks;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.BlockPlanks;
 import net.minecraft.item.Item;
 import net.minecraftforge.registries.IForgeRegistry;
 
 /**
  * Class to create the modBlocks.
  * References to the blocks can be made here
- *
+ * <p>
  * We disabled the following finals since we are neither able to mark the items as final, nor do we want to provide public accessors.
  */
-@SuppressWarnings({"squid:ClassVariableVisibilityCheck", "squid:S2444", "squid:S1444", "squid:S1820" , })
+@SuppressWarnings({"squid:ClassVariableVisibilityCheck", "squid:S2444", "squid:S1444", "squid:S1820",})
 public final class ModBlocks
 {
     /*
@@ -42,6 +43,14 @@ public final class ModBlocks
     public static BlockHutBarracksTower       blockHutBarracksTower;
     public static BlockInfoPoster             blockInfoPoster;
     public static BlockPaperwall              blockPaperWall;
+    public static BlockHutCook                blockHutCook;
+    public static BlockShingle                blockShingleOak;
+    public static BlockShingle                blockShingleBirch;
+    public static BlockShingle                blockShingleJungle;
+    public static BlockShingle                blockShingleSpruce;
+    public static BlockShingle                blockShingleDarkOak;
+    public static BlockShingle                blockShingleAcacia;
+    public static BlockShingleSlab            blockShingleSlab;
 
     /**
      * Private constructor to hide the implicit public one.
@@ -83,6 +92,22 @@ public final class ModBlocks
         blockHutBarracksTower = new BlockHutBarracksTower().registerBlock(registry);
         blockInfoPoster = new BlockInfoPoster().registerBlock(registry);
         blockPaperWall = new BlockPaperwall().registerBlock(registry);
+        blockHutCook   = new BlockHutCook().registerBlock(registry);
+
+        blockShingleOak = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.OAK),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.OAK.getName()).registerBlock(registry);
+        blockShingleJungle = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.JUNGLE),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.JUNGLE.getName()).registerBlock(registry);
+        blockShingleBirch = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.BIRCH),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.BIRCH.getName()).registerBlock(registry);
+        blockShingleSpruce = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.SPRUCE),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.SPRUCE.getName()).registerBlock(registry);
+        blockShingleDarkOak = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.DARK_OAK),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.DARK_OAK.getName()).registerBlock(registry);
+        blockShingleAcacia = new BlockShingle(new BlockPlanks().getDefaultState().withProperty(BlockPlanks.VARIANT, BlockPlanks.EnumType.ACACIA),
+                BlockShingle.BLOCK_PREFIX + "_" + BlockPlanks.EnumType.ACACIA.getName()).registerBlock(registry);
+        blockShingleSlab = new BlockShingleSlab().registerBlock(registry);
+
     }
 
     public static void registerItemBlock(final IForgeRegistry<Item> registry)
@@ -112,5 +137,13 @@ public final class ModBlocks
         blockHutBarracks.registerItemBlock(registry);
         blockInfoPoster.registerItemBlock(registry);
         blockPaperWall.registerItemBlock(registry);
+        blockHutCook.registerItemBlock(registry);
+        blockShingleOak.registerItemBlock(registry);
+        blockShingleBirch.registerItemBlock(registry);
+        blockShingleJungle.registerItemBlock(registry);
+        blockShingleSpruce.registerItemBlock(registry);
+        blockShingleDarkOak.registerItemBlock(registry);
+        blockShingleAcacia.registerItemBlock(registry);
+        blockShingleSlab.registerItemBlock(registry);
     }
 }

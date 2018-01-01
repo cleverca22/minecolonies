@@ -9,7 +9,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Abstract class for the walkToProxy.
@@ -32,14 +31,14 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
     private final EntityLiving entity;
 
     /**
-     * The current proxy the citizen paths to.
-     */
-    private BlockPos currentProxy;
-
-    /**
      * List of proxies the entity has to follow.
      */
     private final List<BlockPos> proxyList = new ArrayList<>();
+
+    /**
+     * The current proxy the citizen paths to.
+     */
+    private BlockPos currentProxy;
 
     /**
      * Current target the entity has.
@@ -69,28 +68,6 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
     }
 
     /**
-     * Take the direct path to a certain location.
-     *
-     * @param target the target position.
-     * @param range  the range.
-     * @param onMove entity on move or not?
-     * @return true if arrived.
-     */
-    private boolean takeTheDirectPath(@NotNull final BlockPos target, final int range, final boolean onMove)
-    {
-        if (onMove)
-        {
-            final int targetY = careAboutY() ? entity.getPosition().getY() : target.getY();
-            return isLivingAtSiteWithMove(entity, target.getX(), target.getY(), target.getZ(), range)
-                     || EntityUtils.isLivingAtSite(entity, target.getX(), targetY, target.getZ(), range + 1);
-        }
-        else
-        {
-            return !EntityUtils.isLivingAtSite(entity, target.getX(), target.getY(), target.getZ(), range);
-        }
-    }
-
-    /**
      * Leads the entity to a certain position due to proxies.
      *
      * @param target the target position.
@@ -107,7 +84,7 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
         }
 
         final double distanceToPath = careAboutY()
-                                        ? BlockPosUtil.getDistanceSquared2D(entity.getPosition(), target) : BlockPosUtil.getDistanceSquared(entity.getPosition(), target);
+                ? BlockPosUtil.getDistanceSquared2D(entity.getPosition(), target) : BlockPosUtil.getDistanceSquared(entity.getPosition(), target);
 
         if (distanceToPath <= MIN_RANGE_FOR_DIRECT_PATH)
         {
@@ -139,10 +116,6 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
             if (proxyList.isEmpty())
             {
                 currentProxy = target;
-            }
-
-            if (proxyList.isEmpty())
-            {
                 return takeTheDirectPath(target, range, onMove);
             }
 
@@ -158,6 +131,85 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
         }
 
         return !onMove;
+    }
+
+    /**
+     * Getter for the proxyList.
+     *
+     * @return a copy of the list
+     */
+    public List<BlockPos> getProxyList()
+    {
+        return new ArrayList<>(proxyList);
+    }
+
+    /**
+     * Add an entry to the proxy list.
+     *
+     * @param pos the position to add.
+     */
+    public void addToProxyList(final BlockPos pos)
+    {
+        proxyList.add(pos);
+    }
+
+    /**
+     * Method to call to detect if an entity living is at site with move.
+     *
+     * @param entity the entity to check.
+     * @param x      the x value.
+     * @param y      the y value.
+     * @param z      the z value.
+     * @param range  the range.
+     * @return true if so.
+     */
+    public boolean isLivingAtSiteWithMove(final EntityLiving entity, final int x, final int y, final int z, final int range)
+    {
+        if (!EntityUtils.isLivingAtSiteWithMove(entity, x, y, z, range))
+        {
+            EntityUtils.tryMoveLivingToXYZ(entity, x, y, z);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Getter for the entity accociated with the proxy.
+     *
+     * @return the entity.
+     */
+    public EntityLiving getEntity()
+    {
+        return entity;
+    }
+
+    /**
+     * Take the direct path to a certain location.
+     *
+     * @param target the target position.
+     * @param range  the range.
+     * @param onMove entity on move or not?
+     * @return true if arrived.
+     */
+    private boolean takeTheDirectPath(@NotNull final BlockPos target, final int range, final boolean onMove)
+    {
+        final boolean arrived;
+        if (onMove)
+        {
+            final int targetY = careAboutY() ? entity.getPosition().getY() : target.getY();
+            arrived = isLivingAtSiteWithMove(entity, target.getX(), target.getY(), target.getZ(), range)
+                     || EntityUtils.isLivingAtSite(entity, target.getX(), targetY, target.getZ(), range + 1);
+        }
+        else
+        {
+            arrived = !EntityUtils.isLivingAtSite(entity, target.getX(), target.getY(), target.getZ(), range);
+        }
+
+        if(arrived)
+        {
+            this.target = null;
+        }
+        return arrived;
     }
 
     /**
@@ -207,6 +259,7 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
     {
         double weight = Double.MAX_VALUE;
         BlockPos proxyPoint = null;
+        double distance = Double.MAX_VALUE;
 
         for (final BlockPos wayPoint : getWayPoints())
         {
@@ -220,19 +273,20 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
             {
                 proxyPoint = wayPoint;
                 weight = currentWeight;
+                distance = simpleDistance;
             }
         }
 
         if (proxyList.contains(proxyPoint))
         {
-            proxyPoint = null;
+            return target;
         }
 
         if (proxyPoint != null)
         {
             proxyList.add(proxyPoint);
 
-            getProxy(target, proxyPoint, distanceToPath);
+            getProxy(target, proxyPoint, distanceToPath - distance);
 
             return proxyList.get(0);
         }
@@ -241,76 +295,9 @@ public abstract class AbstractWalkToProxy implements IWalkToProxy
         return target;
     }
 
-    /**
-     * Get a list of waypoints depending on the entity.
-     *
-     * @return the set of waypoints.
-     */
-    public abstract Set<BlockPos> getWayPoints();
-
-    /**
-     * Check if for distance calculation the y level should be taken into account.
-     *
-     * @return true if so.
-     */
-    public abstract boolean careAboutY();
-
-    /**
-     * Try to get a specialized proxy to a certain target.
-     *
-     * @param target         the target.
-     * @param distanceToPath the distance to it.
-     * @return a special proxy point of existent, else null.
-     */
-    @Nullable
-    public abstract BlockPos getSpecializedProxy(final BlockPos target, final double distanceToPath);
-
-    /**
-     * Getter for the proxyList.
-     *
-     * @return a copy of the list
-     */
-    public List<BlockPos> getProxyList()
+    @Override
+    public void reset()
     {
-        return new ArrayList<>(proxyList);
-    }
-
-    /**
-     * Add an entry to the proxy list.
-     *
-     * @param pos the position to add.
-     */
-    public void addToProxyList(final BlockPos pos)
-    {
-        proxyList.add(pos);
-    }
-
-    /**
-     * Method to call to detect if an entity living is at site with move.
-     * @param entity the entity to check.
-     * @param x the x value.
-     * @param y the y value.
-     * @param z the z value.
-     * @param range the range.
-     * @return true if so.
-     */
-    public boolean isLivingAtSiteWithMove(final EntityLiving entity, final int x, final int y, final int z, final int range)
-    {
-        if(!EntityUtils.isLivingAtSiteWithMove(entity, x, y, z, range))
-        {
-            EntityUtils.tryMoveLivingToXYZ(entity, x, y, z);
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Getter for the entity accociated with the proxy.
-     *
-     * @return the entity.
-     */
-    public EntityLiving getEntity()
-    {
-        return entity;
+        this.target = null;
     }
 }
